@@ -1,33 +1,57 @@
-const venom = require('venom-bot');
+const { Boom } = require('@hapi/boom');
+const makeWASocket = require('@whiskeysockets/baileys').default;
+const { useMultiFileAuthState, DisconnectReason } = require('@whiskeysockets/baileys');
+const express = require('express');
+const qrcode = require('qrcode-terminal');
 
-venom
-  .create({
-    session: 'dumwala-session',
-    browserArgs: [
-      '--no-sandbox',
-      '--disable-setuid-sandbox',
-      '--disable-dev-shm-usage',
-      '--disable-accelerated-2d-canvas',
-      '--no-first-run',
-      '--no-zygote',
-      '--single-process',
-      '--disable-gpu',
-      '--headless=new' // THIS is the key part
-    ]
-  })
-  .then((client) => start(client))
-  .catch((error) => {
-    console.error(error);
+// Express server for UptimeRobot ping
+const app = express();
+const PORT = process.env.PORT || 3000;
+app.get('/ping', (req, res) => res.send('Ping success 💖'));
+app.listen(PORT, () => console.log(`🚀 Ping server running on port ${PORT}`));
+
+// WhatsApp bot
+async function startSock() {
+  const { state, saveCreds } = await useMultiFileAuthState('auth_info');
+
+  const sock = makeWASocket({
+    auth: state,
+    printQRInTerminal: true,
   });
 
-function start(client) {
-  client.onMessage(async (message) => {
-    if (message.body.toLowerCase() === 'hi' && message.isGroupMsg === false) {
-      await client.sendText(message.from, 'Heyyy! This is your Dumwala bot 🌶️🍗\nType "menu" to get started!');
-    } else if (message.body.toLowerCase() === 'menu') {
-      await client.sendText(message.from, '🥘 Dumwala Menu:\n1. Biryani\n2. Kebab\n3. Drinks\n\nReply with the number to order.');
-    } else {
-      await client.sendText(message.from, 'Got it! Our human agent will get back to you soon ❤️');
+  sock.ev.on('creds.update', saveCreds);
+
+  sock.ev.on('connection.update', (update) => {
+    const { connection, lastDisconnect, qr } = update;
+
+    if (qr) qrcode.generate(qr, { small: true });
+
+    if (connection === 'close') {
+      const shouldReconnect = (lastDisconnect?.error)?.output?.statusCode !== DisconnectReason.loggedOut;
+      console.log('❌ Connection closed. Reconnecting:', shouldReconnect);
+      if (shouldReconnect) startSock();
+    } else if (connection === 'open') {
+      console.log('✅ Connected to WhatsApp!');
+    }
+  });
+
+  sock.ev.on('messages.upsert', async ({ messages, type }) => {
+    if (type !== 'notify') return;
+
+    const msg = messages[0];
+    if (!msg.message) return;
+
+    const text = msg.message.conversation || msg.message.extendedTextMessage?.text || '';
+    const sender = msg.key.remoteJid;
+
+    console.log(`📩 Message from ${sender}: ${text}`);
+
+    if (text.toLowerCase() === 'hi') {
+      await sock.sendMessage(sender, { text: 'Hey cutie 💖 How can I help you today?' });
+    } else if (text.toLowerCase().includes('love')) {
+      await sock.sendMessage(sender, { text: 'Aww 🥺 I love you too 💌' });
     }
   });
 }
+
+startSock();
