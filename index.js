@@ -47,7 +47,7 @@ async function startSock() {
     console.log(`📩 Message from ${sender}: ${text}`);
 
     if (text.toLowerCase() === 'hi') {
-      await sock.sendMessage(sender, { text: 'Hey cutie 💖 How can I help you today?' });
+      await sock.sendMessage(sender, { text: 'Hey, How can I help you today?' });
     } else if (text.toLowerCase().includes('love')) {
       await sock.sendMessage(sender, { text: 'Aww 🥺 I love you too 💌' });
     }
